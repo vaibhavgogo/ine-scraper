@@ -22,5 +22,5 @@ export const api = {
     request('/api/products', { method: 'POST', body: JSON.stringify(payload) }),
   history: (productId) => request(`/api/products/${productId}/history`),
   log: (productId) => request(`/api/products/${productId}/log`),
-  exportCsvUrl: () => `${BASE_URL}/api/export/csv`,
+  exportCsvUrl: () => `${BASE_URL}/api/export`,
 };

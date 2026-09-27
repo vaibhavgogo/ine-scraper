@@ -24,7 +24,7 @@ export default function ScrapeLogTable({ log }) {
             <td>
               <span className={`tag ${row.outcome}`}>{row.outcome}</span>
             </td>
-            <td>{row.attempts}</td>
+           <td>{row.attempt_count}</td>
             <td>{row.error_message || ''}</td>
           </tr>
         ))}

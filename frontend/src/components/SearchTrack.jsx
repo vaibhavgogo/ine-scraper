@@ -15,7 +15,8 @@ export default function SearchTrack({ onTracked }) {
     setLoading(true);
     try {
       const data = await api.search(query);
-      setResults(data.results || []);
+      // backend returns a raw array from /api/search, not { results: [...] }
+      setResults(data || []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -24,12 +25,12 @@ export default function SearchTrack({ onTracked }) {
   }
 
   async function loadOptions(product) {
-    if (optionsByProduct[product.storeProductId]) return;
+    if (optionsByProduct[product.id]) return;
     try {
-      const detail = await api.storeItem(product.storeProductId);
+      const detail = await api.storeItem(product.id);
       setOptionsByProduct((prev) => ({
         ...prev,
-        [product.storeProductId]: detail.options || [],
+        [product.id]: detail.options || [],
       }));
     } catch (err) {
       setError(err.message);
@@ -37,7 +38,7 @@ export default function SearchTrack({ onTracked }) {
   }
 
   async function track(product) {
-    const optionLabel = selectedOption[product.storeProductId];
+    const optionLabel = selectedOption[product.id];
     if (!optionLabel) {
       setError('Pick an option before tracking.');
       return;
@@ -45,10 +46,10 @@ export default function SearchTrack({ onTracked }) {
     setError(null);
     try {
       await api.trackProduct({
-        storeProductId: product.storeProductId,
+        storeProductId: product.id,
+        slug: product.slug,
         productName: product.name,
         optionLabel,
-        productUrl: product.url,
       });
       onTracked();
     } catch (err) {
@@ -79,26 +80,26 @@ export default function SearchTrack({ onTracked }) {
       {results && results.length > 0 && (
         <div className="result-list">
           {results.map((product) => (
-            <div className="result-row" key={product.storeProductId} onMouseEnter={() => loadOptions(product)}>
+            <div className="result-row" key={product.id} onMouseEnter={() => loadOptions(product)}>
               <div>
                 <span className="name">{product.name}</span>
-                <span className="id">#{product.storeProductId}</span>
+                <span className="id">#{product.id}</span>
               </div>
               <div className="option-picker">
                 <select
-                  value={selectedOption[product.storeProductId] || ''}
+                  value={selectedOption[product.id] || ''}
                   onChange={(e) =>
                     setSelectedOption((prev) => ({
                       ...prev,
-                      [product.storeProductId]: e.target.value,
+                      [product.id]: e.target.value,
                     }))
                   }
                   onFocus={() => loadOptions(product)}
                 >
                   <option value="">Choose option...</option>
-                  {(optionsByProduct[product.storeProductId] || []).map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
+                  {(optionsByProduct[product.id] || []).map((opt) => (
+                    <option key={opt.id} value={opt.label}>
+                      {opt.label}
                     </option>
                   ))}
                 </select>
