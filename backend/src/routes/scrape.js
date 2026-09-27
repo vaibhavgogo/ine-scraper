@@ -15,51 +15,61 @@ function requireCronSecret(req, res, next) {
 }
 
 router.post('/scrape/run', requireCronSecret, async (req, res) => {
-  const { data: products, error } = await supabase
-    .from('products')
-    .select('*')
-    .eq('is_active', true);
+  // Respond immediately -- a full run (browser launch + hover/click/retries
+  // per product) can take well over a minute, longer than proxies/cron
+  // clients want to hold a connection open for. Do the real work after
+  // responding instead of making the caller wait for it.
+  res.status(202).json({ message: 'Scrape started in background' });
 
-  if (error) return res.status(500).json({ error: error.message });
+  try {
+    const { data: products, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('is_active', true);
 
-  // One browser instance reused across every tracked product in this run
-  // -- much faster than launching a fresh browser per product.
-  // headless:true is specifically blocked by this site (confirmed via
-  // repeated testing -- the reveal never enables in headless Chromium
-  // despite the browser mechanics working correctly). Running in real,
-  // non-headless mode instead, inside a virtual display (Xvfb) provided
-  // by the deployment container -- see backend/Dockerfile.
-  const browser = await chromium.launch({
-    headless: false,
-    args: ['--disable-blink-features=AutomationControlled'],
-  });
-  const results = [];
+    if (error) {
+      console.error('scrape/run: failed to load products:', error.message);
+      return;
+    }
 
-  for (const product of products) {
-    const result = await scrapeProductWithRetries(
-      product.store_product_id,
-      product.option_label,
-      browser
-    );
-
-    const { error: insertErr } = await supabase.from('price_history').insert({
-      product_id: product.id,
-      price: result.price,
-      stock: result.stock,
-      outcome: result.outcome,
-      attempt_count: result.attemptCount,
-      error_message: result.error,
+    const browser = await chromium.launch({
+      headless: false,
+      args: ['--disable-blink-features=AutomationControlled'],
     });
 
-    results.push({
-      productId: product.id,
-      ...result,
-      insertError: insertErr ? insertErr.message : null,
-    });
+    for (const product of products) {
+      const result = await scrapeProductWithRetries(
+        product.store_product_id,
+        product.option_label,
+        browser
+      );
+
+      const { error: insertErr } = await supabase.from('price_history').insert({
+        product_id: product.id,
+        price: result.price,
+        stock: result.stock,
+        outcome: result.outcome,
+        attempt_count: result.attemptCount,
+        error_message: result.error,
+      });
+
+      if (insertErr) {
+        console.error(
+          `scrape/run: insert failed for product ${product.id}:`,
+          insertErr.message
+        );
+      } else {
+        console.log(
+          `scrape/run: product ${product.id} -> ${result.outcome} price=${result.price} stock=${result.stock}`
+        );
+      }
+    }
+
+    await browser.close();
+    console.log('scrape/run: background run complete');
+  } catch (err) {
+    console.error('scrape/run: background run crashed:', err);
   }
-
-  await browser.close();
-  res.json({ scraped: results.length, results });
 });
 
 module.exports = router;
