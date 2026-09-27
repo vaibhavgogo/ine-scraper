@@ -108,12 +108,24 @@ async function scrapeProductOnce(browser, productId, optionLabel) {
 
     const box = await offerPanel.boundingBox();
     if (!box) throw new Error('offer-panel has no bounding box (not visible)');
-    // Start from a position clearly outside the panel first, so the
-    // browser registers a genuine "enter" transition rather than possibly
-    // already starting inside the target area (this can differ between
-    // headed and headless launches).
     await page.mouse.move(0, 0);
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+// Move in many small steps so the browser dispatches a realistic stream of
+// mousemove events along the path, not a single teleport -- the site's
+// "hover to unlock price" logic appears to require this.
+await page.mouse.move(
+  box.x + box.width / 2,
+  box.y + box.height / 2,
+  { steps: 25 }
+);
+
+// Hold the hover with a few small jittery movements, mimicking a human
+// dwelling over the element rather than a perfectly static cursor.
+for (let i = 0; i < 6; i++) {
+  const jitterX = box.x + box.width / 2 + (Math.random() * 6 - 3);
+  const jitterY = box.y + box.height / 2 + (Math.random() * 6 - 3);
+  await page.mouse.move(jitterX, jitterY, { steps: 5 });
+  await page.waitForTimeout(150);
+}
 
     const revealButton = page.locator('.offer-panel button.ctl-main');
     try {
