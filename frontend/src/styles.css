@@ -1,0 +1,258 @@
+:root {
+  --paper: #f3f5f4;
+  --ink: #14231f;
+  --ink-soft: #4b5a56;
+  --line: #d3dbd8;
+  --teal: #1f6f62;
+  --teal-dim: #e4efec;
+  --amber: #c97b2e;
+  --red: #b3432f;
+  --green: #2f7a4f;
+  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  line-height: 1.45;
+}
+
+.shell {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+
+.top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 20px;
+  margin-bottom: 28px;
+}
+
+.top h1 {
+  font-size: 1.5rem;
+  font-weight: 650;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.top p {
+  margin: 4px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+button {
+  font-family: var(--sans);
+  cursor: pointer;
+}
+
+.btn {
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  padding: 8px 16px;
+  border-radius: 3px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.btn:hover {
+  opacity: 0.85;
+}
+
+.btn.secondary {
+  background: transparent;
+  color: var(--ink);
+}
+
+.btn.small {
+  padding: 4px 10px;
+  font-size: 0.78rem;
+}
+
+section.block {
+  margin-bottom: 36px;
+}
+
+section.block > h2 {
+  font-size: 0.95rem;
+  font-weight: 650;
+  margin: 0 0 12px;
+  color: var(--ink);
+}
+
+.search-row {
+  display: flex;
+  gap: 8px;
+}
+
+.search-row input {
+  flex: 1;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 0.9rem;
+  background: white;
+}
+
+.search-row input:focus {
+  outline: 2px solid var(--teal);
+  outline-offset: -1px;
+}
+
+.result-list {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.result-row .name {
+  font-size: 0.9rem;
+}
+
+.result-row .id {
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  margin-left: 8px;
+}
+
+.option-picker {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.option-picker select {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 0.82rem;
+  background: white;
+}
+
+.empty {
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  padding: 18px 0;
+  border-top: 1px dashed var(--line);
+  margin-top: 8px;
+}
+
+.tracked-panel {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  margin-bottom: 14px;
+  background: white;
+}
+
+.tracked-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.tracked-head .title {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.tracked-head .sub {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-family: var(--mono);
+  margin-top: 2px;
+}
+
+.tracked-body {
+  border-top: 1px solid var(--line);
+  padding: 18px 16px 20px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.tab {
+  border: 1px solid var(--line);
+  background: transparent;
+  padding: 5px 12px;
+  border-radius: 3px;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.tab.active {
+  background: var(--teal-dim);
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+th, td {
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono);
+}
+
+th {
+  color: var(--ink-soft);
+  font-weight: 500;
+  font-size: 0.72rem;
+}
+
+.tag {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-family: var(--mono);
+}
+
+.tag.success { background: #e6f2e9; color: var(--green); }
+.tag.retried { background: #fbecd9; color: var(--amber); }
+.tag.failed  { background: #f6e4e0; color: var(--red); }
+
+.chart-wrap {
+  height: 220px;
+  margin-bottom: 12px;
+}
+
+.error-banner {
+  background: #f6e4e0;
+  color: var(--red);
+  border: 1px solid #e0b8ac;
+  padding: 10px 14px;
+  border-radius: 3px;
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+}
