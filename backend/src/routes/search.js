@@ -11,7 +11,7 @@ function sleep(ms) {
 }
 
 async function fetchPageOnce(p) {
- const res = await fetch(
+  const res = await fetch(
     `https://demo.inelabteamdev.com/api/v2/listings?page=${p}&limit=60`,
     {
       headers: {
@@ -30,23 +30,29 @@ async function fetchPageOnce(p) {
       `Page ${p} failed: status=${res.status} content-type=${contentType} body=${body.slice(0, 300)}`
     );
     err.status = res.status;
+    // Try to read a retryAfter hint from a JSON body, if present
+    try {
+      const parsed = JSON.parse(body);
+      if (parsed.retryAfter) err.retryAfter = parsed.retryAfter;
+    } catch {
+      // body wasn't JSON (e.g. the 503 HTML page) -- no retryAfter available
+    }
     throw err;
   }
 
   return JSON.parse(body);
 }
 
-// The store occasionally 503s under load (its own capacity limit, not a
-// block) -- retry transient 5xx a few times with backoff before giving up.
-async function fetchPage(p, retries = 3) {
+async function fetchPage(p, retries = 4) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       return await fetchPageOnce(p);
     } catch (err) {
-      const isTransient = !err.status || err.status >= 500;
+      const isTransient = !err.status || err.status === 429 || err.status >= 500;
       const isLastAttempt = attempt === retries;
       if (!isTransient || isLastAttempt) throw err;
-      await sleep(500 * attempt); // 500ms, 1000ms, ...
+      const delayMs = err.retryAfter ? err.retryAfter * 1000 : 500 * attempt;
+      await sleep(delayMs);
     }
   }
 }
