@@ -8,13 +8,26 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 let cache = { data: [], fetchedAt: 0 };
 async function fetchPage(p) {
   const res = await fetch(
-    `https://demo.inelabteamdev.com/api/v2/listings?page=${p}&limit=20`
+    `https://demo.inelabteamdev.com/api/v2/listings?page=${p}&limit=20`,
+    {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'application/json',
+      },
+    }
   );
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Page ${p} failed: ${res.status} — ${body.slice(0, 200)}`);
+
+  const contentType = res.headers.get('content-type') || '';
+  const body = await res.text();
+
+  if (!res.ok || !contentType.includes('application/json')) {
+    throw new Error(
+      `Page ${p} failed: status=${res.status} content-type=${contentType} body=${body.slice(0, 300)}`
+    );
   }
-  return res.json();
+
+  return JSON.parse(body);
 }
 async function fetchAllProducts() {
   const first = await fetchPage(1);
