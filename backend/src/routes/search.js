@@ -11,8 +11,8 @@ function sleep(ms) {
 }
 
 async function fetchPageOnce(p) {
-  const res = await fetch(
-    `https://demo.inelabteamdev.com/api/v2/listings?page=${p}&limit=20`,
+ const res = await fetch(
+    `https://demo.inelabteamdev.com/api/v2/listings?page=${p}&limit=60`,
     {
       headers: {
         'User-Agent':
