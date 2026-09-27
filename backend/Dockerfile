@@ -1,4 +1,4 @@
-FROM node:20-bookworm
+FROM node:22-bookworm
 
 # Xvfb provides a virtual display so Chromium can run in real (non-headless)
 # mode with no actual monitor attached -- needed because this target site
