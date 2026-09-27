@@ -59,14 +59,28 @@ async function extractPriceAndStock(page) {
       return style.textDecorationLine.includes('line-through');
     }
 
+    // Some variants show a secondary price line (e.g. "Member price ...")
+    // that is visible and not struck-through, so visibility alone isn't
+    // enough to disambiguate it from the real price. Across every variant
+    // observed, the actual price a shopper pays is consistently rendered
+    // bold/heavy-weight (a <b>/<strong> tag or font-weight >= 700), while
+    // secondary/decoy price lines are normal-weight. Prefer that.
+    function isEmphasized(el) {
+      const style = window.getComputedStyle(el);
+      const weight = parseInt(style.fontWeight, 10) || 400;
+      return weight >= 700 || el.tagName === 'B' || el.tagName === 'STRONG';
+    }
+
     const all = Array.from(panel.querySelectorAll('*'));
 
     const priceCandidates = all.filter(
       (el) => el.children.length === 0 && CURRENCY_RE.test(el.textContent || '')
     );
-    const realPriceEl = priceCandidates.find(
+    const visibleNonStruck = priceCandidates.filter(
       (el) => isVisible(el) && !isStruckThrough(el)
     );
+    const emphasized = visibleNonStruck.filter(isEmphasized);
+    const realPriceEl = (emphasized.length ? emphasized : visibleNonStruck)[0];
 
     let stockText = null;
     const availEl = panel.querySelector('[class*="avail"]');
@@ -101,6 +115,15 @@ async function scrapeProductOnce(browser, productId, optionLabel) {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
     await page.bringToFront();
 
+    // A cookie/consent overlay can appear (seen in deployed environments,
+    // likely region-triggered) and intercept clicks on the reveal button.
+    // Remove it outright rather than hunting for an accept-button selector.
+    await page.evaluate(() => {
+      document
+        .querySelectorAll('[class*="consent"], [class*="cookie"]')
+        .forEach((el) => el.remove());
+    });
+
     const offerPanel = page.locator('.offer-panel');
     await offerPanel.waitFor({ state: 'attached', timeout: 10000 });
 
@@ -108,24 +131,12 @@ async function scrapeProductOnce(browser, productId, optionLabel) {
 
     const box = await offerPanel.boundingBox();
     if (!box) throw new Error('offer-panel has no bounding box (not visible)');
+    // Start from a position clearly outside the panel first, so the
+    // browser registers a genuine "enter" transition rather than possibly
+    // already starting inside the target area (this can differ between
+    // headed and headless launches).
     await page.mouse.move(0, 0);
-// Move in many small steps so the browser dispatches a realistic stream of
-// mousemove events along the path, not a single teleport -- the site's
-// "hover to unlock price" logic appears to require this.
-await page.mouse.move(
-  box.x + box.width / 2,
-  box.y + box.height / 2,
-  { steps: 25 }
-);
-
-// Hold the hover with a few small jittery movements, mimicking a human
-// dwelling over the element rather than a perfectly static cursor.
-for (let i = 0; i < 6; i++) {
-  const jitterX = box.x + box.width / 2 + (Math.random() * 6 - 3);
-  const jitterY = box.y + box.height / 2 + (Math.random() * 6 - 3);
-  await page.mouse.move(jitterX, jitterY, { steps: 5 });
-  await page.waitForTimeout(150);
-}
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 
     const revealButton = page.locator('.offer-panel button.ctl-main');
     try {
@@ -147,7 +158,7 @@ for (let i = 0; i < 6; i++) {
         () =>
           document.querySelector('.offer-panel')?.classList.contains('offer-ready'),
         null,
-        { timeout: 15000, polling: 100 }
+        { timeout: 20000, polling: 100 }
       );
     } catch (e) {
       throw new Error(`STAGE=offer-ready: ${e.message}`);
