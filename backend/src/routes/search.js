@@ -6,30 +6,33 @@ const router = express.Router();
 // ourselves -- mirroring how the store's own search box appears to work.
 const CACHE_TTL_MS = 10 * 60 * 1000;
 let cache = { data: [], fetchedAt: 0 };
-
+async function fetchPage(p) {
+  const res = await fetch(
+    `https://demo.inelabteamdev.com/api/v2/listings?page=${p}&limit=20`
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Page ${p} failed: ${res.status} — ${body.slice(0, 200)}`);
+  }
+  return res.json();
+}
 async function fetchAllProducts() {
-  const first = await fetch(
-    'https://demo.inelabteamdev.com/api/v2/listings?page=1&limit=20'
-  ).then((r) => r.json());
-
+  const first = await fetchPage(1);
   const totalPages = first.totalPages;
   const all = [...first.results];
 
-  const pageNumbers = [];
-  for (let p = 2; p <= totalPages; p++) pageNumbers.push(p);
-
-  const chunks = await Promise.all(
-    pageNumbers.map((p) =>
-      fetch(
-        `https://demo.inelabteamdev.com/api/v2/listings?page=${p}&limit=20`
-      ).then((r) => r.json())
-    )
-  );
-  chunks.forEach((c) => all.push(...c.results));
+  const BATCH_SIZE = 5;
+  for (let start = 2; start <= totalPages; start += BATCH_SIZE) {
+    const batch = [];
+    for (let p = start; p < Math.min(start + BATCH_SIZE, totalPages + 1); p++) {
+      batch.push(fetchPage(p));
+    }
+    const results = await Promise.all(batch);
+    results.forEach((r) => all.push(...r.results));
+  }
 
   return all;
 }
-
 async function getCatalog() {
   const isStale = Date.now() - cache.fetchedAt > CACHE_TTL_MS;
   if (isStale || cache.data.length === 0) {
