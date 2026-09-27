@@ -6,7 +6,11 @@ const router = express.Router();
 // ourselves -- mirroring how the store's own search box appears to work.
 const CACHE_TTL_MS = 10 * 60 * 1000;
 let cache = { data: [], fetchedAt: 0 };
-async function fetchPage(p) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchPageOnce(p) {
   const res = await fetch(
     `https://demo.inelabteamdev.com/api/v2/listings?page=${p}&limit=20`,
     {
@@ -22,12 +26,29 @@ async function fetchPage(p) {
   const body = await res.text();
 
   if (!res.ok || !contentType.includes('application/json')) {
-    throw new Error(
+    const err = new Error(
       `Page ${p} failed: status=${res.status} content-type=${contentType} body=${body.slice(0, 300)}`
     );
+    err.status = res.status;
+    throw err;
   }
 
   return JSON.parse(body);
+}
+
+// The store occasionally 503s under load (its own capacity limit, not a
+// block) -- retry transient 5xx a few times with backoff before giving up.
+async function fetchPage(p, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await fetchPageOnce(p);
+    } catch (err) {
+      const isTransient = !err.status || err.status >= 500;
+      const isLastAttempt = attempt === retries;
+      if (!isTransient || isLastAttempt) throw err;
+      await sleep(500 * attempt); // 500ms, 1000ms, ...
+    }
+  }
 }
 async function fetchAllProducts() {
   const first = await fetchPage(1);
@@ -42,6 +63,7 @@ async function fetchAllProducts() {
     }
     const results = await Promise.all(batch);
     results.forEach((r) => all.push(...r.results));
+    await sleep(300); // pause between batches to avoid tripping the store's rate limit
   }
 
   return all;
