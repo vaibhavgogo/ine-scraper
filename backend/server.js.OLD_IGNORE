@@ -1,0 +1,24 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+
+const searchRoutes = require('./src/routes/search');
+const productsRoutes = require('./src/routes/products');
+const scrapeRoutes = require('./src/routes/scrape');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+app.get('/', (_req, res) => {
+  res.json({ status: 'ok', service: 'ine-scraper-backend' });
+});
+
+app.use('/api', searchRoutes);
+app.use('/api', productsRoutes);
+app.use('/api', scrapeRoutes);
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`Server listening on http://localhost:${PORT}`);
+});
