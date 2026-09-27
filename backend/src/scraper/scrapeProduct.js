@@ -43,6 +43,18 @@ async function extractPriceAndStock(page) {
     const panel = document.querySelector('.offer-panel');
     if (!panel) return { priceText: null, stockText: null };
 
+    // Digits are sometimes split across sibling <span> chars and/or
+    // rendered as fullwidth Unicode (U+FF10-FF19) instead of ASCII --
+    // both defeat a naive \d-on-a-leaf-node scan. Normalize first.
+    function normalizeDigits(str) {
+      return str.replace(/[\uFF10-\uFF19]/g, (ch) =>
+        String.fromCharCode(ch.charCodeAt(0) - 0xFF10 + 0x30)
+      );
+    }
+    function normText(el) {
+      return normalizeDigits(el.textContent || '');
+    }
+
     const CURRENCY_RE = /[₹$]\s*[\d\s.,\u00A0\u200B]*\d/;
     const STOCK_RE = /in stock|out of stock|sold out|\d+\s*(units?|left|remaining)/i;
 
@@ -53,29 +65,23 @@ async function extractPriceAndStock(page) {
       if (el.closest('[aria-hidden="true"]')) return false;
       return true;
     }
-
     function isStruckThrough(el) {
-      const style = window.getComputedStyle(el);
-      return style.textDecorationLine.includes('line-through');
+      return window.getComputedStyle(el).textDecorationLine.includes('line-through');
     }
-
-    // Some variants show a secondary price line (e.g. "Member price ...")
-    // that is visible and not struck-through, so visibility alone isn't
-    // enough to disambiguate it from the real price. Across every variant
-    // observed, the actual price a shopper pays is consistently rendered
-    // bold/heavy-weight (a <b>/<strong> tag or font-weight >= 700), while
-    // secondary/decoy price lines are normal-weight. Prefer that.
     function isEmphasized(el) {
-      const style = window.getComputedStyle(el);
-      const weight = parseInt(style.fontWeight, 10) || 400;
+      const weight = parseInt(window.getComputedStyle(el).fontWeight, 10) || 400;
       return weight >= 700 || el.tagName === 'B' || el.tagName === 'STRONG';
     }
 
     const all = Array.from(panel.querySelectorAll('*'));
 
-    const priceCandidates = all.filter(
-      (el) => el.children.length === 0 && CURRENCY_RE.test(el.textContent || '')
+    // Match on full (descendant-inclusive) text, not just leaf nodes.
+    const matching = all.filter((el) => CURRENCY_RE.test(normText(el)));
+    // Keep only the innermost match per branch (drop wrapper ancestors).
+    const priceCandidates = matching.filter(
+      (el) => !matching.some((other) => other !== el && el.contains(other))
     );
+
     const visibleNonStruck = priceCandidates.filter(
       (el) => isVisible(el) && !isStruckThrough(el)
     );
@@ -88,21 +94,17 @@ async function extractPriceAndStock(page) {
       stockText = availEl.textContent.trim();
     } else {
       const stockCandidate = all.find(
-        (el) =>
-          el.children.length === 0 &&
-          STOCK_RE.test(el.textContent || '') &&
-          isVisible(el)
+        (el) => el.children.length === 0 && STOCK_RE.test(el.textContent || '') && isVisible(el)
       );
       if (stockCandidate) stockText = stockCandidate.textContent.trim();
     }
 
     return {
-      priceText: realPriceEl ? realPriceEl.textContent : null,
+      priceText: realPriceEl ? normalizeDigits(realPriceEl.textContent) : null,
       stockText,
     };
   });
 }
-
 async function scrapeProductOnce(browser, productId, optionLabel) {
   const context = await browser.newContext();
   await context.addInitScript(() => {
@@ -136,8 +138,10 @@ async function scrapeProductOnce(browser, productId, optionLabel) {
     // already starting inside the target area (this can differ between
     // headed and headless launches).
     await page.mouse.move(0, 0);
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-
+await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 15 });
+await page.waitForTimeout(150);
+// nudge slightly -- some listeners want a second distinct mousemove, not just entry
+await page.mouse.move(box.x + box.width / 2 + 3, box.y + box.height / 2 + 3, { steps: 5 });
     const revealButton = page.locator('.offer-panel button.ctl-main');
     try {
       await page.waitForFunction(
