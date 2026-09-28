@@ -14,6 +14,14 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.e
 const { createClient } = require('@supabase/supabase-js');
 const { scrapeProductWithRetries } = require('./scrapeProduct');
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Observed: within one run the first few products succeed, then the rest
+// stall at the reveal step (button never enables), even across retries.
+// That pattern looks like the site throttling reveals per IP, so we pace
+// requests instead of firing them back to back.
+const PAUSE_BETWEEN_PRODUCTS_MS = 45000;
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -34,7 +42,11 @@ async function main() {
 
   console.log(`Found ${products.length} active tracked product(s)`);
 
-  for (const product of products) {
+  for (let i = 0; i < products.length; i++) {
+    const product = products[i];
+    if (i > 0) {
+      await sleep(PAUSE_BETWEEN_PRODUCTS_MS + Math.floor(Math.random() * 15000));
+    }
     const result = await scrapeProductWithRetries(
       product.store_product_id,
       product.option_label,

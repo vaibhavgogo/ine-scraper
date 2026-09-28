@@ -1,7 +1,11 @@
 ﻿const { chromium } = require('playwright');
 
 function parsePrice(raw) {
-  const s = raw.replace(/[^\d.,]/g, '').trim();
+  const normalized = raw
+    .replace(/[\uFF10-\uFF19]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 0x30))
+    .replace(/\uFF0C/g, ',')
+    .replace(/\uFF0E/g, '.');
+  const s = normalized.replace(/[^\d.,]/g, '').trim();
   const lastComma = s.lastIndexOf(',');
   const lastDot = s.lastIndexOf('.');
   const lastSep = Math.max(lastComma, lastDot);
@@ -43,50 +47,63 @@ async function extractPriceAndStock(page) {
     const panel = document.querySelector('.offer-panel');
     if (!panel) return { priceText: null, stockText: null };
 
-    // Digits are sometimes split across sibling <span> chars and/or
-    // rendered as fullwidth Unicode (U+FF10-FF19) instead of ASCII --
-    // both defeat a naive \d-on-a-leaf-node scan. Normalize first.
-    function normalizeDigits(str) {
-      return str.replace(/[\uFF10-\uFF19]/g, (ch) =>
-        String.fromCharCode(ch.charCodeAt(0) - 0xFF10 + 0x30)
-      );
-    }
-    function normText(el) {
-      return normalizeDigits(el.textContent || '');
+    // The price can be rendered in awkward ways: fullwidth Unicode digits
+    // (e.g. "１４５"), one <span> per character, and zero-width or
+    // non-breaking spaces mixed in. Normalize all of that before matching.
+    function normalize(str) {
+      return (str || '')
+        .replace(/[\uFF10-\uFF19]/g, (ch) =>
+          String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 0x30)
+        )
+        .replace(/\uFF0C/g, ',')
+        .replace(/\uFF0E/g, '.')
+        .replace(/[\u200B\u200C\u200D\uFEFF\u00A0\s]/g, '');
     }
 
-    const CURRENCY_RE = /[₹$]\s*[\d\s.,\u00A0\u200B]*\d/;
-    const STOCK_RE = /in stock|out of stock|sold out|\d+\s*(units?|left|remaining)/i;
+    // An element counts as "a price" only if its ENTIRE text is a single
+    // currency amount. That excludes containers holding several prices at
+    // once, and labelled lines such as "Member price ₹35,805".
+    const PRICE_ONLY_RE = /^[₹$][\d.,]*\d$/;
+    const STOCK_RE = /in stock|out of stock|sold out|\d+\s*(units?|left|remaining|available)/i;
 
     function isVisible(el) {
-      const style = window.getComputedStyle(el);
-      if (style.display === 'none' || style.visibility === 'hidden') return false;
-      if (parseFloat(style.opacity) === 0) return false;
-      if (el.closest('[aria-hidden="true"]')) return false;
+      if (!el.getClientRects().length) return false;
+      for (let node = el; node && node !== panel.parentElement; node = node.parentElement) {
+        const s = window.getComputedStyle(node);
+        if (s.display === 'none' || s.visibility === 'hidden') return false;
+        if (parseFloat(s.opacity) === 0) return false;
+        if (node.getAttribute('aria-hidden') === 'true') return false;
+      }
       return true;
     }
+
+    // A strike-through set on a parent doesn't appear in a child's own
+    // computed style, so check every ancestor up to the panel.
     function isStruckThrough(el) {
-      return window.getComputedStyle(el).textDecorationLine.includes('line-through');
+      for (let node = el; node && node !== panel.parentElement; node = node.parentElement) {
+        if (window.getComputedStyle(node).textDecorationLine.includes('line-through')) {
+          return true;
+        }
+      }
+      return false;
     }
+
     function isEmphasized(el) {
-      const weight = parseInt(window.getComputedStyle(el).fontWeight, 10) || 400;
+      const s = window.getComputedStyle(el);
+      const weight = parseInt(s.fontWeight, 10) || 400;
       return weight >= 700 || el.tagName === 'B' || el.tagName === 'STRONG';
     }
 
     const all = Array.from(panel.querySelectorAll('*'));
 
-    // Match on full (descendant-inclusive) text, not just leaf nodes.
-    const matching = all.filter((el) => CURRENCY_RE.test(normText(el)));
-    // Keep only the innermost match per branch (drop wrapper ancestors).
-    const priceCandidates = matching.filter(
-      (el) => !matching.some((other) => other !== el && el.contains(other))
+    const candidates = all.filter(
+      (el) =>
+        PRICE_ONLY_RE.test(normalize(el.textContent)) &&
+        isVisible(el) &&
+        !isStruckThrough(el)
     );
-
-    const visibleNonStruck = priceCandidates.filter(
-      (el) => isVisible(el) && !isStruckThrough(el)
-    );
-    const emphasized = visibleNonStruck.filter(isEmphasized);
-    const realPriceEl = (emphasized.length ? emphasized : visibleNonStruck)[0];
+    const emphasized = candidates.filter(isEmphasized);
+    const realPriceEl = (emphasized.length ? emphasized : candidates)[0];
 
     let stockText = null;
     const availEl = panel.querySelector('[class*="avail"]');
@@ -94,17 +111,21 @@ async function extractPriceAndStock(page) {
       stockText = availEl.textContent.trim();
     } else {
       const stockCandidate = all.find(
-        (el) => el.children.length === 0 && STOCK_RE.test(el.textContent || '') && isVisible(el)
+        (el) =>
+          el.children.length === 0 &&
+          STOCK_RE.test(el.textContent || '') &&
+          isVisible(el)
       );
       if (stockCandidate) stockText = stockCandidate.textContent.trim();
     }
 
     return {
-      priceText: realPriceEl ? normalizeDigits(realPriceEl.textContent) : null,
+      priceText: realPriceEl ? normalize(realPriceEl.textContent) : null,
       stockText,
     };
   });
 }
+
 async function scrapeProductOnce(browser, productId, optionLabel) {
   const context = await browser.newContext();
   await context.addInitScript(() => {
@@ -138,10 +159,8 @@ async function scrapeProductOnce(browser, productId, optionLabel) {
     // already starting inside the target area (this can differ between
     // headed and headless launches).
     await page.mouse.move(0, 0);
-await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 15 });
-await page.waitForTimeout(150);
-// nudge slightly -- some listeners want a second distinct mousemove, not just entry
-await page.mouse.move(box.x + box.width / 2 + 3, box.y + box.height / 2 + 3, { steps: 5 });
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+
     const revealButton = page.locator('.offer-panel button.ctl-main');
     try {
       await page.waitForFunction(
