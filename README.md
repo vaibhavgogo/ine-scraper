@@ -2,10 +2,10 @@
 
 Search INE's mock store, pick a product **and an option** (e.g. "Creator kit"), and track its price and stock over time. A scraper runs on a schedule, stores every attempt (success, retried or failed) in Postgres, and the dashboard shows price/stock history, a per-product scrape log, and a CSV export.
 
-- **Live site:** `https://ine-scraper-4qlxc56xv-vaibhavs-projects-b69136b8.vercel.app/`
+- **Live site:** https://ine-scraper-4qlxc56xv-vaibhavs-projects-b69136b8.vercel.app/
 - **Backend API:** https://ine-scraper-jsxn.onrender.com (`/health` to check it is up)
 - **Repo:** https://github.com/vaibhavgogo/ine-scraper
-- **Headed-run recording:** `https://drive.google.com/drive/folders/1UIKuHMsrGM5P4kJy6dgjNukDoSe5YE9S?usp=sharing`
+- **Headed-run recording:** https://drive.google.com/drive/folders/1UIKuHMsrGM5P4kJy6dgjNukDoSe5YE9S?usp=sharing
 - **Design note:** see `DESIGN_NOTE.md`
 
 ## Stack
